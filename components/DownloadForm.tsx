@@ -55,11 +55,26 @@ export default function DownloadForm() {
         }
     };
 
+    const sanitizeFilename = (text: string, maxLen = 80): string => {
+        return text
+            .replace(/[\u{1F600}-\u{1F9FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F000}-\u{1FFFF}]/gu, "")
+            .replace(/[\\/:*?"<>|#@]/g, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, maxLen)
+            .trim() || "tiktok-video";
+    };
+
     const proxyDownload = (fileUrl: string, filename: string) => {
         const link = document.createElement("a");
         link.href = `/api/proxy?url=${encodeURIComponent(fileUrl)}&filename=${encodeURIComponent(filename)}`;
         link.download = filename;
         link.click();
+
+        // Redirect to Saweria after download starts
+        setTimeout(() => {
+            window.open("https://s.shopee.co.id/20qD74dDZT", "_blank");
+        }, 1000);
     };
 
     return (
@@ -198,7 +213,7 @@ export default function DownloadForm() {
                             onClick={() =>
                                 proxyDownload(
                                     result.videoUrl,
-                                    `tiktok-${result.author}-nowm.mp4`
+                                    `${sanitizeFilename(result.title)}.mp4`
                                 )
                             }
                         >
@@ -220,7 +235,7 @@ export default function DownloadForm() {
                                 id="download-audio-btn"
                                 className="btn-action btn-action-secondary"
                                 onClick={() =>
-                                    proxyDownload(result.audioUrl!, `tiktok-${result.author}.mp3`)
+                                    proxyDownload(result.audioUrl!, `${sanitizeFilename(result.title)}.mp3`)
                                 }
                             >
                                 <svg
