@@ -47,15 +47,23 @@ async function downloadViaTikWM(url: string): Promise<{
         if (json.code !== 0 || !json.data) return null;
 
         const d: TikWMData = json.data;
-        const videoUrl = d.hdplay || d.play;
+
+        // tikwm sometimes returns relative URLs that need domain prefix
+        const fixUrl = (u: string | undefined | null): string | null => {
+            if (!u) return null;
+            if (u.startsWith("/")) return `https://www.tikwm.com${u}`;
+            return u;
+        };
+
+        const videoUrl = fixUrl(d.hdplay) || fixUrl(d.play);
         if (!videoUrl) return null;
 
         return {
             title: d.title || "Video TikTok",
             author: d.author?.nickname || d.author?.unique_id || "Unknown",
-            thumbnail: d.origin_cover || d.cover || null,
+            thumbnail: fixUrl(d.origin_cover) || fixUrl(d.cover) || null,
             videoUrl,
-            audioUrl: d.music || d.music_info?.play || null,
+            audioUrl: fixUrl(d.music) || fixUrl(d.music_info?.play) || null,
         };
     } catch (e) {
         console.error("[tikwm] error:", e);

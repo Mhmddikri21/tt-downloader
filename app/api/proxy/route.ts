@@ -25,8 +25,14 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        const contentType =
-            response.headers.get("content-type") ?? "application/octet-stream";
+        // Force correct MIME type based on filename extension
+        // (upstream server sometimes returns wrong content-type)
+        let contentType = "application/octet-stream";
+        if (filename.endsWith(".mp4")) {
+            contentType = "video/mp4";
+        } else if (filename.endsWith(".mp3")) {
+            contentType = "audio/mpeg";
+        }
 
         return new NextResponse(response.body, {
             status: 200,

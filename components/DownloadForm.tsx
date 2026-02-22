@@ -66,15 +66,27 @@ export default function DownloadForm() {
     };
 
     const proxyDownload = (fileUrl: string, filename: string) => {
-        const link = document.createElement("a");
-        link.href = `/api/proxy?url=${encodeURIComponent(fileUrl)}&filename=${encodeURIComponent(filename)}`;
-        link.download = filename;
-        link.click();
+        const proxyUrl = `/api/proxy?url=${encodeURIComponent(fileUrl)}&filename=${encodeURIComponent(filename)}`;
 
-        // Redirect to Saweria after download starts
+        // Open download in new tab for better mobile compatibility
+        const downloadWindow = window.open(proxyUrl, "_blank");
+
+        // If popup was blocked, fallback to anchor approach
+        if (!downloadWindow) {
+            const link = document.createElement("a");
+            link.href = proxyUrl;
+            link.download = filename;
+            link.style.display = "none";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Redirect to Shopee after download starts
+        // Using location.href so mobile opens the Shopee app via deep link
         setTimeout(() => {
-            window.open("https://s.shopee.co.id/20qD74dDZT", "_blank");
-        }, 1000);
+            window.location.href = "https://s.shopee.co.id/20qD74dDZT";
+        }, 1500);
     };
 
     return (
