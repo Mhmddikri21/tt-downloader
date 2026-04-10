@@ -13,6 +13,7 @@ interface VideoResult {
 export default function DownloadForm() {
     const [url, setUrl] = useState("");
     const [loading, setLoading] = useState(false);
+    const [downloading, setDownloading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [result, setResult] = useState<VideoResult | null>(null);
 
@@ -65,14 +66,41 @@ export default function DownloadForm() {
             .trim() || "tiktok-video";
     };
 
-    const proxyDownload = (fileUrl: string, filename: string) => {
+    const proxyDownload = async (fileUrl: string, filename: string) => {
         const proxyUrl = `/api/proxy?url=${encodeURIComponent(fileUrl)}&filename=${encodeURIComponent(filename)}`;
 
-        // Open download in new tab for better mobile compatibility
-        const downloadWindow = window.open(proxyUrl, "_blank");
+        setDownloading(true);
 
-        // If popup was blocked, fallback to anchor approach
-        if (!downloadWindow) {
+        try {
+            // Fetch the entire file as a blob first — this ensures the
+            // download completes before we trigger the save dialog,
+            // which prevents Android mobile browsers from aborting the
+            // download when the page navigates to the affiliate link.
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error("Download failed");
+
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+
+            const link = document.createElement("a");
+            link.href = blobUrl;
+            link.download = filename;
+            link.style.display = "none";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Clean up blob URL after browser has had time to process it
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+
+            // Redirect to Tokopedia after download completes
+            // Using window.open so the current page stays intact and
+            // the download isn't interrupted
+            setTimeout(() => {
+                window.open("https://vt.tokopedia.com/t/ZS9LLsKej1gmL-Dj93e/", "_blank");
+            }, 1500);
+        } catch {
+            // Fallback: direct anchor download (streaming approach)
             const link = document.createElement("a");
             link.href = proxyUrl;
             link.download = filename;
@@ -80,13 +108,13 @@ export default function DownloadForm() {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-        }
 
-        // Redirect to Shopee after download starts
-        // Using location.href so mobile opens the Shopee app via deep link
-        setTimeout(() => {
-            window.location.href = "https://s.shopee.co.id/20qD74dDZT";
-        }, 1500);
+            setTimeout(() => {
+                window.open("https://vt.tokopedia.com/t/ZS9LLsKej1gmL-Dj93e/", "_blank");
+            }, 3000);
+        } finally {
+            setDownloading(false);
+        }
     };
 
     return (
@@ -222,6 +250,7 @@ export default function DownloadForm() {
                         <button
                             id="download-video-btn"
                             className="btn-action btn-action-primary"
+                            disabled={downloading}
                             onClick={() =>
                                 proxyDownload(
                                     result.videoUrl,
@@ -229,23 +258,33 @@ export default function DownloadForm() {
                                 )
                             }
                         >
-                            <svg
-                                width="16"
-                                height="16"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.5"
-                                viewBox="0 0 24 24"
-                            >
-                                <path d="M12 5v14M5 12l7 7 7-7" />
-                            </svg>
-                            Video (No WM)
+                            {downloading ? (
+                                <>
+                                    <span className="spinner" />
+                                    Mengunduh...
+                                </>
+                            ) : (
+                                <>
+                                    <svg
+                                        width="16"
+                                        height="16"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2.5"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path d="M12 5v14M5 12l7 7 7-7" />
+                                    </svg>
+                                    Video (No WM)
+                                </>
+                            )}
                         </button>
 
                         {result.audioUrl && (
                             <button
                                 id="download-audio-btn"
                                 className="btn-action btn-action-secondary"
+                                disabled={downloading}
                                 onClick={() =>
                                     proxyDownload(result.audioUrl!, `${sanitizeFilename(result.title)}.mp3`)
                                 }
