@@ -1,4 +1,174 @@
 import { NextRequest, NextResponse } from "next/server";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const TiktokDL = require("@tobyg74/tiktok-api-dl");
+
+interface VideoResult {
+    type: "video";
+    title: string;
+    author: string;
+    thumbnail: string | null;
+    videoUrl: string;
+    audioUrl: string | null;
+}
+
+interface ImageResult {
+    type: "image";
+    title: string;
+    author: string;
+    thumbnail: string | null;
+    images: string[];
+    audioUrl: string | null;
+}
+
+type DownloadResult = VideoResult | ImageResult;
+
+// ─── URL validation ────────────────────────────────────────────────────────
+
+function parseTikTokUrl(rawUrl: string): URL | null {
+    try {
+        const parsed = new URL(rawUrl);
+        const hostname = parsed.hostname.toLowerCase();
+        const isTikTokHost =
+            hostname === "tiktok.com" ||
+            hostname.endsWith(".tiktok.com") ||
+            hostname === "tiktokv.com" ||
+            hostname.endsWith(".tiktokv.com");
+
+        if (!["http:", "https:"].includes(parsed.protocol) || !isTikTokHost) {
+            return null;
+        }
+
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+// ─── Strategy 1: @tobyg74/tiktok-api-dl (v1) ──────────────────────────────
+
+async function downloadViaLibV1(url: string): Promise<DownloadResult | null> {
+    try {
+        const resp = await TiktokDL.Downloader(url, { version: "v1" });
+
+        if (resp.status !== "success" || !resp.result) return null;
+
+        const r = resp.result;
+
+        // Image/slideshow type
+        if (r.type === "image" && Array.isArray(r.images) && r.images.length > 0) {
+            return {
+                type: "image",
+                title: r.desc || "Slideshow TikTok",
+                author: r.author?.nickname || "Unknown",
+                thumbnail: r.images[0] || null,
+                images: r.images,
+                audioUrl: r.music?.playUrl?.[0] || null,
+            };
+        }
+
+        // Video type
+        const videoUrl =
+            r.video?.playAddr?.[0] ||
+            r.video?.downloadAddr?.[0] ||
+            null;
+
+        if (!videoUrl) return null;
+
+        return {
+            type: "video",
+            title: r.desc || "Video TikTok",
+            author: r.author?.nickname || "Unknown",
+            thumbnail: r.video?.cover?.[0] || r.video?.originCover?.[0] || null,
+            videoUrl,
+            audioUrl: r.music?.playUrl?.[0] || null,
+        };
+    } catch (e) {
+        console.error("[lib-v1] error:", e);
+        return null;
+    }
+}
+
+// ─── Strategy 2: @tobyg74/tiktok-api-dl (v3 — MusicalDown) ────────────────
+
+async function downloadViaLibV3(url: string): Promise<DownloadResult | null> {
+    try {
+        const resp = await TiktokDL.Downloader(url, { version: "v3" });
+
+        if (resp.status !== "success" || !resp.result) return null;
+
+        const r = resp.result;
+
+        // Image/slideshow type
+        if (r.type === "image" && Array.isArray(r.images) && r.images.length > 0) {
+            return {
+                type: "image",
+                title: r.desc || "Slideshow TikTok",
+                author: r.author?.nickname || "Unknown",
+                thumbnail: r.images[0] || null,
+                images: r.images,
+                audioUrl: typeof r.music === "string" ? r.music : null,
+            };
+        }
+
+        const videoUrl = r.videoHD || r.videoSD || null;
+
+        if (!videoUrl) return null;
+
+        return {
+            type: "video",
+            title: r.desc || "Video TikTok",
+            author: r.author?.nickname || "Unknown",
+            thumbnail: null,
+            videoUrl,
+            audioUrl: typeof r.music === "string" ? r.music : null,
+        };
+    } catch (e) {
+        console.error("[lib-v3] error:", e);
+        return null;
+    }
+}
+
+// ─── Strategy 3: @tobyg74/tiktok-api-dl (v2 — SSSTik) ─────────────────────
+
+async function downloadViaLibV2(url: string): Promise<DownloadResult | null> {
+    try {
+        const resp = await TiktokDL.Downloader(url, { version: "v2" });
+
+        if (resp.status !== "success" || !resp.result) return null;
+
+        const r = resp.result;
+
+        // Image/slideshow type
+        if (r.type === "image" && Array.isArray(r.images) && r.images.length > 0) {
+            return {
+                type: "image",
+                title: r.desc || "Slideshow TikTok",
+                author: r.author?.nickname || "Unknown",
+                thumbnail: r.images[0] || null,
+                images: r.images,
+                audioUrl: r.music?.playUrl?.[0] || null,
+            };
+        }
+
+        const videoUrl = r.video?.playAddr?.[0] || null;
+
+        if (!videoUrl) return null;
+
+        return {
+            type: "video",
+            title: r.desc || "Video TikTok",
+            author: r.author?.nickname || "Unknown",
+            thumbnail: null,
+            videoUrl,
+            audioUrl: r.music?.playUrl?.[0] || null,
+        };
+    } catch (e) {
+        console.error("[lib-v2] error:", e);
+        return null;
+    }
+}
+
+// ─── Strategy 4 (last resort): tikwm.com ───────────────────────────────────
 
 interface TikWMData {
     id: string;
@@ -9,6 +179,7 @@ interface TikWMData {
     hdplay: string;
     wmplay: string;
     music: string;
+    images?: string[];
     music_info?: {
         title: string;
         author: string;
@@ -22,13 +193,7 @@ interface TikWMData {
     };
 }
 
-async function downloadViaTikWM(url: string): Promise<{
-    title: string;
-    author: string;
-    thumbnail: string | null;
-    videoUrl: string;
-    audioUrl: string | null;
-} | null> {
+async function downloadViaTikWM(url: string): Promise<DownloadResult | null> {
     try {
         const res = await fetch("https://www.tikwm.com/api/", {
             method: "POST",
@@ -39,6 +204,7 @@ async function downloadViaTikWM(url: string): Promise<{
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             },
             body: JSON.stringify({ url, hd: 1 }),
+            signal: AbortSignal.timeout(10000),
         });
 
         if (!res.ok) return null;
@@ -55,10 +221,29 @@ async function downloadViaTikWM(url: string): Promise<{
             return u;
         };
 
+        // Image/slideshow type — tikwm uses "images" array
+        if (Array.isArray(d.images) && d.images.length > 0) {
+            const imageUrls = d.images
+                .map((img: string) => fixUrl(img))
+                .filter((u): u is string => u !== null);
+
+            if (imageUrls.length > 0) {
+                return {
+                    type: "image",
+                    title: d.title || "Slideshow TikTok",
+                    author: d.author?.nickname || d.author?.unique_id || "Unknown",
+                    thumbnail: imageUrls[0],
+                    images: imageUrls,
+                    audioUrl: fixUrl(d.music) || fixUrl(d.music_info?.play) || null,
+                };
+            }
+        }
+
         const videoUrl = fixUrl(d.hdplay) || fixUrl(d.play);
         if (!videoUrl) return null;
 
         return {
+            type: "video",
             title: d.title || "Video TikTok",
             author: d.author?.nickname || d.author?.unique_id || "Unknown",
             thumbnail: fixUrl(d.origin_cover) || fixUrl(d.cover) || null,
@@ -71,79 +256,7 @@ async function downloadViaTikWM(url: string): Promise<{
     }
 }
 
-async function downloadViaOembed(url: string): Promise<{
-    title: string;
-    author: string;
-    thumbnail: string | null;
-} | null> {
-    try {
-        const res = await fetch(
-            `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`
-        );
-        if (!res.ok) return null;
-        const json = await res.json();
-        return {
-            title: json.title || "Video TikTok",
-            author: json.author_name || json.author_unique_id || "Unknown",
-            thumbnail: json.thumbnail_url || null,
-        };
-    } catch {
-        return null;
-    }
-}
-
-async function downloadViaTikTokAPI(url: string): Promise<{
-    title: string;
-    author: string;
-    thumbnail: string | null;
-    videoUrl: string;
-    audioUrl: string | null;
-} | null> {
-    try {
-        // Try to get the video page and extract __UNIVERSAL_DATA_FOR_REHYDRATION__
-        const pageRes = await fetch(url, {
-            headers: {
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-            },
-            redirect: "follow",
-        });
-
-        if (!pageRes.ok) return null;
-
-        const html = await pageRes.text();
-
-        // Extract JSON from script tag
-        const scriptMatch = html.match(
-            /<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([^<]+)<\/script>/
-        );
-
-        if (!scriptMatch?.[1]) return null;
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data: any = JSON.parse(scriptMatch[1]);
-        const itemStruct =
-            data?.["__DEFAULT_SCOPE__"]?.["webapp.video-detail"]?.itemInfo?.itemStruct;
-
-        if (!itemStruct) return null;
-
-        const videoUrl = itemStruct.video?.playAddr || itemStruct.video?.downloadAddr;
-        if (!videoUrl) return null;
-
-        return {
-            title: itemStruct.desc || "Video TikTok",
-            author: itemStruct.author?.nickname || itemStruct.author?.uniqueId || "Unknown",
-            thumbnail: itemStruct.video?.cover || itemStruct.video?.originCover || null,
-            videoUrl,
-            audioUrl: itemStruct.music?.playUrl || null,
-        };
-    } catch (e) {
-        console.error("[tiktok-direct] error:", e);
-        return null;
-    }
-}
+// ─── POST handler ──────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
     try {
@@ -156,53 +269,56 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const isTikTok =
-            /tiktok\.com/i.test(url) ||
-            /vm\.tiktok\.com/i.test(url) ||
-            /vt\.tiktok\.com/i.test(url);
-
-        if (!isTikTok) {
+        const parsedUrl = parseTikTokUrl(url.trim());
+        if (!parsedUrl) {
             return NextResponse.json(
                 { error: "URL tidak valid. Pastikan itu link TikTok yang benar." },
                 { status: 400 }
             );
         }
 
-        // Strategy 1: tikwm.com API (most reliable)
-        console.log("[/api/download] Trying tikwm.com...");
-        const tikwmResult = await downloadViaTikWM(url);
+        const normalizedUrl = parsedUrl.toString();
+
+        // Strategy 1: tiktok-api-dl v1 (TikTok API)
+        console.log("[/api/download] Trying tiktok-api-dl v1...");
+        const v1Result = await downloadViaLibV1(normalizedUrl);
+        if (v1Result) {
+            console.log("[/api/download] ✓ v1 succeeded");
+            return NextResponse.json(v1Result);
+        }
+
+        // Strategy 2: tiktok-api-dl v3 (MusicalDown)
+        console.log("[/api/download] v1 failed, trying v3 (MusicalDown)...");
+        const v3Result = await downloadViaLibV3(normalizedUrl);
+        if (v3Result) {
+            console.log("[/api/download] ✓ v3 succeeded");
+            return NextResponse.json(v3Result);
+        }
+
+        // Strategy 3: tiktok-api-dl v2 (SSSTik)
+        console.log("[/api/download] v3 failed, trying v2 (SSSTik)...");
+        const v2Result = await downloadViaLibV2(normalizedUrl);
+        if (v2Result) {
+            console.log("[/api/download] ✓ v2 succeeded");
+            return NextResponse.json(v2Result);
+        }
+
+        // Strategy 4: tikwm.com (last resort)
+        console.log("[/api/download] All lib versions failed, trying tikwm...");
+        const tikwmResult = await downloadViaTikWM(normalizedUrl);
         if (tikwmResult) {
+            console.log("[/api/download] ✓ tikwm succeeded");
             return NextResponse.json(tikwmResult);
         }
 
-        // Strategy 2: Direct TikTok page scraping
-        console.log("[/api/download] tikwm failed, trying direct scraping...");
-        const directResult = await downloadViaTikTokAPI(url);
-        if (directResult) {
-            return NextResponse.json(directResult);
-        }
-
-        // Strategy 3: At least get metadata via oembed
-        console.log("[/api/download] All download methods failed, checking oembed...");
-        const oembedResult = await downloadViaOembed(url);
-        if (oembedResult) {
-            // We have metadata but no download URL — video is valid but can't download
-            return NextResponse.json(
-                {
-                    error:
-                        "Video ditemukan tetapi tidak bisa didownload saat ini. Server TikTok mungkin sedang membatasi akses. Coba lagi nanti.",
-                },
-                { status: 503 }
-            );
-        }
-
-        // Nothing worked — URL is likely invalid
+        // Nothing worked
+        console.log("[/api/download] All strategies failed");
         return NextResponse.json(
             {
                 error:
-                    "Video tidak ditemukan. Pastikan URL yang dimasukkan benar dan video masih tersedia.",
+                    "Video tidak bisa didownload saat ini. Pastikan URL benar dan coba lagi nanti.",
             },
-            { status: 404 }
+            { status: 503 }
         );
     } catch (err) {
         console.error("[/api/download] error:", err);

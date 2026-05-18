@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
+/* Font loaded via next/font/google in layout.tsx — no @import needed */
 
 :root {
   --font-inter: "Inter", sans-serif;
@@ -244,6 +244,103 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Input container for paste button positioning */
+.input-container {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.input-container .url-input {
+  width: 100%;
+  padding-right: 80px;
+}
+
+.paste-btn {
+  position: absolute;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.paste-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-primary);
+}
+
+/* Image gallery for slideshow posts */
+.image-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.image-gallery-item {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  aspect-ratio: 1;
+  background: #0d0d18;
+}
+
+.image-gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s;
+}
+
+.image-gallery-item:hover img {
+  transform: scale(1.05);
+}
+
+.image-download-btn {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s, transform 0.2s, background 0.2s;
+}
+
+.image-gallery-item:hover .image-download-btn {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.image-download-btn:hover {
+  background: var(--accent-pink);
+}
+
+.image-download-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* Feature pills */
